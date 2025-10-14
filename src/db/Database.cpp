@@ -10,7 +10,6 @@ Database &db::getDatabase() {
 }
 
 void Database::add(std::unique_ptr<DbFile> file) {
-    // TODO pa0
     const std::string &name = file->getName();
     if (files.contains(name)) {
         throw std::logic_error("File already exists");
@@ -19,7 +18,6 @@ void Database::add(std::unique_ptr<DbFile> file) {
 }
 
 std::unique_ptr<DbFile> Database::remove(const std::string &name) {
-    // TODO pa0
     auto nh = files.extract(name);
     if (nh.empty()) {
         throw std::logic_error("File does not exist");
@@ -29,6 +27,5 @@ std::unique_ptr<DbFile> Database::remove(const std::string &name) {
 }
 
 DbFile &Database::get(const std::string &name) const {
-    // TODO pa0
     return *files.at(name);
 }

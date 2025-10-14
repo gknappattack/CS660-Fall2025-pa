@@ -5,12 +5,10 @@
 using namespace db;
 
 BufferPool::BufferPool() : available(DEFAULT_NUM_PAGES) {
-    // TODO pa0
     std::iota(available.rbegin(), available.rend(), 0);
 }
 
 BufferPool::~BufferPool() {
-    // TODO pa0
     for (const size_t &pos: dirty) {
         const Page &page = pages[pos];
         const PageId &pid = pos_to_pid[pos];
@@ -19,7 +17,6 @@ BufferPool::~BufferPool() {
 }
 
 Page &BufferPool::getPage(const PageId &pid) {
-    // TODO pa0
     // If already in buffer pool, make it the most recent page and return it
     if (contains(pid)) {
         size_t pos = pid_to_pos.at(pid);
@@ -54,24 +51,20 @@ Page &BufferPool::getPage(const PageId &pid) {
 }
 
 void BufferPool::markDirty(const PageId &pid) {
-    // TODO pa0
     size_t pos = pid_to_pos.at(pid);
     dirty.insert(pos);
 }
 
 bool BufferPool::isDirty(const PageId &pid) const {
-    // TODO pa0
     size_t pos = pid_to_pos.at(pid);
     return dirty.contains(pos);
 }
 
 bool BufferPool::contains(const PageId &pid) const {
-    // TODO pa0
     return pid_to_pos.contains(pid);
 }
 
 void BufferPool::discardPage(const PageId &pid) {
-    // TODO pa0
     size_t pos = pid_to_pos.at(pid);
     pid_to_pos.erase(pid);
     pos_to_pid[pos] = {};
@@ -83,7 +76,6 @@ void BufferPool::discardPage(const PageId &pid) {
 }
 
 void BufferPool::flushPage(const PageId &pid) {
-    // TODO pa0
     size_t pos = pid_to_pos.at(pid);
     if (dirty.erase(pos) == 0)
         return;
@@ -92,7 +84,6 @@ void BufferPool::flushPage(const PageId &pid) {
 }
 
 void BufferPool::flushFile(const std::string &file) {
-    // TODO pa0
     std::vector<size_t> to_flush;
     for (const size_t &pos: dirty) {
         const PageId &pid = pos_to_pid[pos];

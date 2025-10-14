@@ -9,13 +9,24 @@ using namespace db;
 const TupleDesc &DbFile::getTupleDesc() const { return td; }
 
 DbFile::DbFile(const std::string &name, const TupleDesc &td) : name(name), td(td) {
-    // TODO pa1: open file and initialize numPages
     // Hint: use open, fstat
+    fd = open(name.c_str(), O_RDWR);
+    if (fd == -1) {
+        throw std::runtime_error("Failed to open file");
+    }
+
+    struct stat st;
+    if (fstat(fd, &st) == -1) {
+        throw std::runtime_error("Failed to get file stats");
+    }
+
+    // Set num pages
+    numPages = st.st_size / db::DEFAULT_PAGE_SIZE;
 }
 
 DbFile::~DbFile() {
-    // TODO pa1: close file
-    // Hind: use close
+    // Close file when destroying DbFile object
+    close(fd);
 }
 
 const std::string &DbFile::getName() const { return name; }
@@ -24,6 +35,8 @@ void DbFile::readPage(Page &page, const size_t id) const {
     reads.push_back(id);
     // TODO pa1: read page
     // Hint: use pread
+    //ssize_t bytesRead = pread(fd, page.data(), db::DEFAULT_PAGE_SIZE, id * DEFAULT_PAGE_SIZE);
+
 }
 
 void DbFile::writePage(const Page &page, const size_t id) const {

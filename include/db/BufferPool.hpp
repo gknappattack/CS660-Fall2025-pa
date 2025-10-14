@@ -17,7 +17,6 @@ namespace db {
  * @note A BufferPool owns the Page objects that are stored in it.
  */
     class BufferPool {
-        // TODO pa0: add private members
         std::array<Page, DEFAULT_NUM_PAGES> pages;
         std::array<PageId, DEFAULT_NUM_PAGES> pos_to_pid;
         std::unordered_map<const PageId, size_t> pid_to_pos;

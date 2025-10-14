@@ -13,7 +13,6 @@
  */
 namespace db {
     class Database {
-        // TODO pa0: add private members
         std::unordered_map<std::string, std::unique_ptr<DbFile>> files;
 
         BufferPool bufferPool;
