@@ -8,8 +8,21 @@ using namespace db;
 HeapFile::HeapFile(const std::string &name, const TupleDesc &td) : DbFile(name, td) {}
 
 void HeapFile::insertTuple(const Tuple &t) {
-    // TODO pa1
+    // Get last page of file
+    Page page = Page{};
+    readPage(page, numPages - 1);
+    HeapPage hp = HeapPage(page, td);
 
+    if (!hp.insertTuple(t)) {
+        // If page is full, create a new page and insert tuple into it
+        page = Page{};
+        HeapPage newhp = HeapPage(page, td);
+        newhp.insertTuple(t);
+        numPages++;
+    }
+
+    // Write page to disk, new or existing
+    writePage(page, numPages - 1);
 }
 
 void HeapFile::deleteTuple(const Iterator &it) {
