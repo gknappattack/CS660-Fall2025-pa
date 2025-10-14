@@ -9,6 +9,7 @@ HeapFile::HeapFile(const std::string &name, const TupleDesc &td) : DbFile(name, 
 
 void HeapFile::insertTuple(const Tuple &t) {
     // TODO pa1
+
 }
 
 void HeapFile::deleteTuple(const Iterator &it) {
@@ -24,9 +25,35 @@ void HeapFile::next(Iterator &it) const {
 }
 
 Iterator HeapFile::begin() const {
-    // TODO pa1
+    // Return iterator to first populated tuple in file. Iterator should consist of a page number and slot number
+
+    // iterate until numPages
+    for (int i = 0; i < numPages; ++i) {
+        // Read ith page from this file
+        Page page = Page{};
+        readPage(page, i);
+
+        // Wrap page as heap page
+        HeapPage hp = HeapPage(page, td);
+
+        // Check for first populated tuple in current page
+        size_t slot = hp.begin();
+        if (slot != hp.end()) {
+            return Iterator(*this, i, slot);
+        }
+    }
+
+    // If no tuples found, return end iterator
+    return end();
 }
 
 Iterator HeapFile::end() const {
-    // TODO pa1
+    // Read first page from file
+    Page p = Page{};
+    readPage(p, 0);
+
+    HeapPage hp = HeapPage(p, td);
+
+    // Return iterator to final page and final slot
+    return Iterator(*this, numPages - 1, hp.end());
 }

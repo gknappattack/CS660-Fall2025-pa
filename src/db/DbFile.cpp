@@ -4,13 +4,15 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include "db/HeapPage.hpp"
+
 using namespace db;
 
 const TupleDesc &DbFile::getTupleDesc() const { return td; }
 
 DbFile::DbFile(const std::string &name, const TupleDesc &td) : name(name), td(td) {
     // Hint: use open, fstat
-    fd = open(name.c_str(), O_RDWR);
+    fd = open(name.c_str(), O_RDWR | O_CREAT);
     if (fd == -1) {
         throw std::runtime_error("Failed to open file");
     }
@@ -20,8 +22,14 @@ DbFile::DbFile(const std::string &name, const TupleDesc &td) : name(name), td(td
         throw std::runtime_error("Failed to get file stats");
     }
 
+
     // Set num pages
     numPages = st.st_size / db::DEFAULT_PAGE_SIZE;
+
+    // Set num pages to 1 if zero (i.e. file was just created)
+    if (numPages == 0) {
+        numPages = 1;
+    }
 }
 
 DbFile::~DbFile() {
