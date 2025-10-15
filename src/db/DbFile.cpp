@@ -41,16 +41,12 @@ const std::string &DbFile::getName() const { return name; }
 
 void DbFile::readPage(Page &page, const size_t id) const {
     reads.push_back(id);
-    // TODO pa1: read page
-    // Hint: use pread
-    //ssize_t bytesRead = pread(fd, page.data(), db::DEFAULT_PAGE_SIZE, id * DEFAULT_PAGE_SIZE);
-
+    pread(fd, page.data(), db::DEFAULT_PAGE_SIZE, id * DEFAULT_PAGE_SIZE);
 }
 
 void DbFile::writePage(const Page &page, const size_t id) const {
     writes.push_back(id);
-    // TODO pa1: write page
-    // Hint: use pwrite
+    pwrite(fd, page.data(), db::DEFAULT_PAGE_SIZE, id * DEFAULT_PAGE_SIZE);
 }
 
 const std::vector<size_t> &DbFile::getReads() const { return reads; }

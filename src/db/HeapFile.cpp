@@ -26,15 +26,53 @@ void HeapFile::insertTuple(const Tuple &t) {
 }
 
 void HeapFile::deleteTuple(const Iterator &it) {
-    // TODO pa1
+    // Get page
+    Page page = Page{};
+    readPage(page, it.page);
+    HeapPage hp = HeapPage(page, td);
+
+    // Delete tuple at it.slot
+    hp.deleteTuple(it.slot);
+
+    // Write page to disk
+    writePage(page, it.page);
 }
 
 Tuple HeapFile::getTuple(const Iterator &it) const {
-    // TODO pa1
+    // Read page from iterator
+    Page page = Page{};
+    readPage(page, it.page);
+    HeapPage hp = HeapPage(page, td);
+
+    return hp.getTuple(it.slot);
 }
 
 void HeapFile::next(Iterator &it) const {
-    // TODO pa1
+    // Get next tuple that has a value
+    bool found = false;
+    while (!found) {
+        // Get page
+        Page page = Page{};
+        readPage(page, it.page);
+        HeapPage hp = HeapPage(page, td);
+
+        hp.next(it.slot);
+
+        // If end of current page is reached and is empty
+        if (it.slot == hp.end() && it.page < numPages - 1) {
+            it.page++;
+            it.slot = 0;
+
+            // Check if first slot in new page contains tuple
+            readPage(page, it.page);
+            HeapPage checkhp = HeapPage(page, td);
+            if (!checkhp.empty(it.slot)) {
+                found = true;
+            }
+        } else {
+            found = true;
+        }
+    }
 }
 
 Iterator HeapFile::begin() const {
