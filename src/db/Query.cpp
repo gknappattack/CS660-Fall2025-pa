@@ -2,6 +2,7 @@
 #include <ostream>
 #include <vector>
 #include <db/Query.hpp>
+#include <map>
 
 using namespace db;
 
@@ -14,7 +15,6 @@ void db::projection(const DbFile &in, DbFile &out, const std::vector<std::string
   std::vector<size_t> fieldMapping;
   fieldMapping.reserve(field_names.size());
   for (const auto &fieldName : field_names) {
-
     fieldMapping.push_back(inputTd.index_of(fieldName));
   }
 
@@ -34,6 +34,7 @@ void db::projection(const DbFile &in, DbFile &out, const std::vector<std::string
     // Insert the projected tuple into the output file
     out.insertTuple(Tuple(outputTupleFields));
 
+    // Increment input tuple
     ++it;
   }
 
@@ -42,7 +43,6 @@ void db::projection(const DbFile &in, DbFile &out, const std::vector<std::string
 void db::filter(const DbFile &in, DbFile &out, const std::vector<FilterPredicate> &pred) {
   // Save input and output file TD
   const TupleDesc &inputTd = in.getTupleDesc();
-  const TupleDesc &outputTd = out.getTupleDesc();
 
   // Iterate through all tuples in the input file
   auto it = in.begin();
@@ -97,107 +97,213 @@ void db::filter(const DbFile &in, DbFile &out, const std::vector<FilterPredicate
   }
 }
 
-
-void db::aggregate(const DbFile &in, DbFile &out, const Aggregate &agg) {
-  // Save input and output file TD
-  const TupleDesc &inputTd = in.getTupleDesc();
-  const TupleDesc &outputTd = out.getTupleDesc();
-
-  // Create vector to store all values from input tuple
-  std::vector<field_t> aggVals;
-  size_t fieldIndex = inputTd.index_of(agg.field);
-
-  // Iterate through all tuples in the input file
-  auto it = in.begin();
-  while (it != in.end()) {
-    const Tuple &inputTuple = *it;
-
-    // Get value from current tuple into vector of values to aggregate
-    field_t inputVal = inputTuple.get_field(fieldIndex);
-    aggVals.push_back(inputVal);
-
-    ++it;
+// Helper function to compute aggregation on a vector of values
+field_t computeAggregation(AggregateOp op, const std::vector<field_t>& aggVals) {
+  if (aggVals.empty()) {
+    throw std::invalid_argument("Cannot aggregate empty group");
   }
 
-  // Check aggregator operator and perform across entire vector - TODO: Check for int or double
-  AggregateOp op = agg.op;
   int resultVal = std::get<int>(aggVals[0]);
-  double avgVal = 0.0;
-  std::vector<field_t> outputTupleFields;
-  field_t outputVal;
-  int val = 0;
+
   switch (op) {
     case AggregateOp::MIN:
-      // Loop through agg Vals
-      for (auto & aggVal : aggVals){
-        val = std::get<int>(aggVal);
-        // Check if val < minVal
+      for (const auto& aggVal : aggVals) {
+        int val = std::get<int>(aggVal);
         if (val < resultVal) {
           resultVal = val;
         }
       }
+      return resultVal;
 
-      // Write single tuple to output file
-      // Convert resultVal back to type field_t
-      outputVal = resultVal;
-      outputTupleFields.push_back(outputVal);
-      out.insertTuple(Tuple(outputTupleFields));
-      break;
     case AggregateOp::MAX:
-      // Loop through agg Vals
-      for (auto & aggVal : aggVals){
-        val = std::get<int>(aggVal);
-        // Check if val < minVal
+      for (const auto& aggVal : aggVals) {
+        int val = std::get<int>(aggVal);
         if (val > resultVal) {
           resultVal = val;
         }
       }
+      return resultVal;
 
-      // Write single tuple to output file
-      // Convert resultVal back to type field_t
-      outputVal = resultVal;
-      outputTupleFields.push_back(outputVal);
-      out.insertTuple(Tuple(outputTupleFields));
-      break;
-    case AggregateOp::AVG:
-      // Iterate over aggVals, skip first value since it is already accounted for
-      for (int i = 1; i < aggVals.size(); i++) {
-        resultVal = resultVal + std::get<int>(aggVals[i]);
+    case AggregateOp::AVG: {
+      for (size_t i = 1; i < aggVals.size(); i++) {
+        resultVal += std::get<int>(aggVals[i]);
       }
+      double avgVal = resultVal / static_cast<double>(aggVals.size());
+      return avgVal;
+    }
 
-      // Calculate average
-      avgVal = resultVal / static_cast<double>(aggVals.size());
-      outputVal = avgVal;
-
-      // Output to file
-      outputTupleFields.push_back(outputVal);
-      out.insertTuple(Tuple(outputTupleFields));
-      break;
     case AggregateOp::SUM:
-      // Iterate over aggVals, skip first value since it is already accounted for
-      for (int i = 1; i < aggVals.size(); i++) {
-        resultVal = resultVal + std::get<int>(aggVals[i]);
+      for (size_t i = 1; i < aggVals.size(); i++) {
+        resultVal += std::get<int>(aggVals[i]);
       }
+      return resultVal;
 
-      // Sum is already calculated
-      outputVal = resultVal;
-
-      // Output to file
-      outputTupleFields.push_back(outputVal);
-      out.insertTuple(Tuple(outputTupleFields));
-      break;
     case AggregateOp::COUNT:
-      // Get size of aggregate value vector and write
-      resultVal = aggVals.size();
-      outputVal = resultVal;
-      outputTupleFields.push_back(outputVal);
-      out.insertTuple(Tuple(outputTupleFields));
-      break;
+      return static_cast<int>(aggVals.size());
+
     default:
       throw std::invalid_argument("Unknown aggregate op");
   }
 }
 
+// Helper function for non-grouped aggregation
+void performAggregation(AggregateOp op, const std::vector<field_t>& aggVals, DbFile& out) {
+  field_t result = computeAggregation(op, aggVals);
+  std::vector<field_t> outputTupleFields;
+  outputTupleFields.push_back(result);
+  out.insertTuple(Tuple(outputTupleFields));
+}
+
+void db::aggregate(const DbFile &in, DbFile &out, const Aggregate &agg) {
+  // Save input and output file TD
+  const TupleDesc &inputTd = in.getTupleDesc();
+
+  // Get the index of the field to aggregate on
+  size_t fieldIndex = inputTd.index_of(agg.field);
+
+  // Check if we're grouping
+  if (agg.group == std::nullopt) {
+    // No grouping aggregate all values into one result
+    std::vector<field_t> aggVals;
+
+    // Iterate through all tuples in the input file
+    auto it = in.begin();
+    while (it != in.end()) {
+      const Tuple &inputTuple = *it;
+      field_t inputVal = inputTuple.get_field(fieldIndex);
+      aggVals.push_back(inputVal);
+      ++it;
+    }
+
+    // Perform aggregation and output single tuple
+    performAggregation(agg.op, aggVals, out);
+
+  } else {
+    // We are grouping - create a map of group values to vectors of aggregate values
+    size_t groupIndex = inputTd.index_of(agg.group.value());
+    std::map<field_t, std::vector<field_t>> groupMap;
+
+    // Iterate through all tuples and organize by group
+    auto it = in.begin();
+    while (it != in.end()) {
+      const Tuple &inputTuple = *it;
+
+      field_t groupValue = inputTuple.get_field(groupIndex);
+      field_t aggValue = inputTuple.get_field(fieldIndex);
+
+      // Add to the appropriate group
+      groupMap[groupValue].push_back(aggValue);
+
+      ++it;
+    }
+
+    // Now process each group and output one tuple per group
+    for (const auto &[groupValue, aggVals] : groupMap) {
+      std::vector<field_t> outputTupleFields;
+
+      // Push back the group value
+      outputTupleFields.push_back(groupValue);
+
+      // Push back the aggregated value for the group
+      field_t aggResult = computeAggregation(agg.op, aggVals);
+      outputTupleFields.push_back(aggResult);
+
+      // Write tuple to the output file
+      out.insertTuple(Tuple(outputTupleFields));
+    }
+  }
+}
+
 void db::join(const DbFile &left, const DbFile &right, DbFile &out, const JoinPredicate &pred) {
-  // TODO: Implement this function
+  // Get TupleDesc objects for the left and right files.
+  const TupleDesc &leftTd = left.getTupleDesc();
+  const TupleDesc &rightTd = right.getTupleDesc();
+  const TupleDesc &outTd = out.getTupleDesc();
+
+  // Get indices of left and right join column
+  size_t leftJoinCol = leftTd.index_of(pred.left);
+  size_t rightJoinCol = rightTd.index_of(pred.right);
+
+  bool isEQ = pred.op == PredicateOp::EQ;
+
+  // Iterate over all tuples in left file
+  auto left_it = left.begin();
+  while (left_it != left.end()) {
+    const Tuple &leftTuple = *left_it;
+
+    // Iterate over all tuples in right file - Check each right
+    auto right_it = right.begin();
+    while (right_it != right.end()) {
+      const Tuple &rightTuple = *right_it;
+
+      bool shouldJoin = false;
+
+      // Check if tuple should be joined based on pred condition
+      switch (pred.op) {
+        case PredicateOp::EQ:
+          if (leftTuple.get_field(leftJoinCol) == rightTuple.get_field(rightJoinCol)) {
+            shouldJoin = true;
+          }
+          break;
+        case PredicateOp::NE:
+          if (leftTuple.get_field(leftJoinCol) != rightTuple.get_field(rightJoinCol)) {
+            shouldJoin = true;
+          }
+          break;
+        case PredicateOp::GT:
+          if (leftTuple.get_field(leftJoinCol) > rightTuple.get_field(rightJoinCol)) {
+            shouldJoin = true;
+          }
+          break;
+        case PredicateOp::LT:
+          if (leftTuple.get_field(leftJoinCol) < rightTuple.get_field(rightJoinCol)) {
+            shouldJoin = true;
+          }
+          break;
+        case PredicateOp::LE:
+          if (leftTuple.get_field(leftJoinCol) <= rightTuple.get_field(rightJoinCol)) {
+            shouldJoin = true;
+          }
+          break;
+        case PredicateOp::GE:
+          if (leftTuple.get_field(leftJoinCol) >= rightTuple.get_field(rightJoinCol)) {
+            shouldJoin = true;
+          }
+          break;
+        default:
+          throw std::invalid_argument("Unknown predicate op");
+      }
+
+      // If tuple is a match
+      if (shouldJoin) {
+        // Vector of fields to create output tuple
+        std::vector<field_t> joinedTupleFields;
+        joinedTupleFields.reserve(outTd.size());
+
+        // Write left tuple values into joinedTupleFields
+        for (size_t i = 0; i < leftTd.size(); i++) {
+          // Check if current field is in outTd schema
+          joinedTupleFields.push_back(leftTuple.get_field(i));
+        }
+
+        // Write right tuple values into joinedTupleFields, if isEQ == true, then skip the filed at rightJoinCol
+        for (size_t i = 0; i < rightTd.size(); i++) {
+          if (isEQ == true) {
+            if (i == rightJoinCol) {
+              continue;
+            }
+          }
+          joinedTupleFields.push_back(rightTuple.get_field(i));
+        }
+
+        // Write output tuple to file
+        out.insertTuple(Tuple(joinedTupleFields));
+      }
+
+      // Increment right iterator
+      ++right_it;
+    }
+    // Increment left iterator after all right tuples are checked
+    ++left_it;
+  }
 }
